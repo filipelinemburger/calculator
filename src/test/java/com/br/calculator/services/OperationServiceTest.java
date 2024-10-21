@@ -1,4 +1,4 @@
-package com.br.calculator;
+package com.br.calculator.services;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;

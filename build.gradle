@@ -58,6 +58,6 @@ dependencies {
 
 
 // Ensure to use JUnit 5
-//test {
-//    useJUnitPlatform()
-//}
+test {
+    useJUnitPlatform()
+}

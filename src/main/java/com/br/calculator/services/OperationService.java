@@ -2,10 +2,13 @@ package com.br.calculator.services;
 
 import com.br.calculator.dto.OperationRequest;
 import com.br.calculator.dto.OperationResponse;
+import com.br.calculator.dto.RecordResponse;
+import com.br.calculator.dto.UserStatsResponse;
 import com.br.calculator.entities.Operation;
 import com.br.calculator.entities.Record;
 import com.br.calculator.entities.User;
 import com.br.calculator.enums.OperationTypeEnum;
+import com.br.calculator.exceptions.OperationException;
 import com.br.calculator.repositories.OperationRepository;
 import com.br.calculator.repositories.RecordRepository;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +26,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class OperationService {
@@ -45,14 +50,41 @@ public class OperationService {
         this.recordRepository = recordRepository;
     }
 
+    public List<RecordResponse> getUserRecords(User user) {
+        var records = recordRepository.findAllByUser(user).orElse(new ArrayList<>());
+        return records.stream().map(this::getRecordResponse).collect(Collectors.toList());
+    }
+
+    public UserStatsResponse getUserStats(User user) {
+        var records = recordRepository.findAllByUser(user).orElse(new ArrayList<>());
+        Optional<Record> lastRecord  = records.stream().max(Comparator.comparingLong(Record::getId));
+        UserStatsResponse userStatsResponse = new UserStatsResponse();
+        userStatsResponse.setTotalOperations((long) records.size());
+        userStatsResponse.setCurrentBalance(lastRecord.map(Record::getAmount).orElse(200));
+        return userStatsResponse;
+    }
+
+    private RecordResponse getRecordResponse(Record record) {
+        var response = new RecordResponse();
+        response.setOperationId(record.getId());
+        response.setDate(record.getDate());
+        response.setOperationCost(record.getOperation().getCost());
+        response.setOperationType(record.getOperation().getType().name());
+        response.setUserBalance(record.getUserBalance());
+        return response;
+    }
+
     public OperationResponse executeOperation(OperationRequest operationRequest, User user) {
         var operationType = OperationTypeEnum.fromString(operationRequest.getOperationType());
         var operationCost = getOperationCost(operationType);
+        var userStats = getUserStats(user);
+        if (userStats.getCurrentBalance() < operationCost) {
+            throw new OperationException("Insufficient credits to execute this operation");
+        }
+
         var result = invokeLambda(operationType, operationRequest.getValue1(), operationRequest.getValue2());
         Operation operation = saveOperation(operationCost, operationType);
-
-        var optionalRecords = recordService.findRecordsByUser(user);
-        List<Record> records = optionalRecords.orElse(new ArrayList<>());
+        List<Record> records = recordService.findRecordsByUser(user).orElse(new ArrayList<>());
         records.sort(Comparator.comparingLong(Record::getId).reversed());
         Record record = new Record();
         record.setOperation(operation);
