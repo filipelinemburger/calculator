@@ -8,6 +8,8 @@ import com.br.calculator.exceptions.UserException;
 import com.br.calculator.security.jwt.JwtTokenProvider;
 import com.br.calculator.services.UserService;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -23,6 +25,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthController {
 
+    private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
+
     private final UserService userService;
     private final JwtTokenProvider jwtTokenProvider;
 
@@ -30,6 +34,7 @@ public class AuthController {
     public ResponseEntity<?> register(@RequestBody User user) {
         Map<String, String> response = new HashMap<>();
         try {
+            logger.info("Creating new user");
             userService.createNewUser(user);
             response.put("message", "User registered successfully!");
             return ResponseEntity.status(CREATED).body(response);
@@ -43,9 +48,11 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody User user) {
         try {
+            logger.info("Starting user authentication");
             var foundUser = userService.doLogin(user);
             String token = jwtTokenProvider.generateToken(foundUser.getUsername());
             Map<String, String> response = new HashMap<>();
+            logger.info("User authenticated successfully");
             response.put("token", token);
             return ResponseEntity.ok(response);
         } catch (UserException ex) {

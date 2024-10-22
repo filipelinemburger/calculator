@@ -1,5 +1,6 @@
 package com.br.calculator.services;
 
+import com.br.calculator.controllers.OperationController;
 import com.br.calculator.dto.OperationRequest;
 import com.br.calculator.dto.OperationResponse;
 import com.br.calculator.dto.RecordResponse;
@@ -11,11 +12,15 @@ import com.br.calculator.enums.OperationTypeEnum;
 import com.br.calculator.exceptions.OperationException;
 import com.br.calculator.repositories.OperationRepository;
 import com.br.calculator.repositories.RecordRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.core.SdkBytes;
@@ -35,6 +40,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class OperationService {
+
+    private static final Logger logger = LoggerFactory.getLogger(OperationService.class);
 
     private static final int INITIAL_AMOUNT = 200;
     @Value("${aws.lambda.function}")
@@ -58,13 +65,16 @@ public class OperationService {
     }
 
     @Cacheable("userOperations")
-    public List<RecordResponse> getUserRecords(User user) {
-        var records = recordRepository.findAllByUser(user).orElse(new ArrayList<>());
-        return records.stream().map(this::getRecordResponse).collect(Collectors.toList());
+    public Page<RecordResponse> getUserRecords(User user, Pageable pageable) {
+        var recordsPage = recordRepository.findAllByUser(user, pageable);
+        logger.info("Data fetched. Mapping response data");
+        return recordsPage.map(this::getRecordResponse);
     }
+
 
     @Cacheable("userStats")
     public UserStatsResponse getUserStats(User user) {
+        logger.info("Fetching user stats");
         var records = recordRepository.findAllByUser(user).orElse(new ArrayList<>());
         Optional<Record> lastRecord = records.stream().max(Comparator.comparingLong(Record::getId));
         UserStatsResponse userStatsResponse = new UserStatsResponse();
@@ -87,11 +97,10 @@ public class OperationService {
         var operationType = OperationTypeEnum.fromString(operationRequest.getOperationType());
         var operationCost = getOperationCost(operationType);
         var userStats = getUserStats(user);
-        if (userStats.getCurrentBalance() < operationCost) {
-            throw new OperationException("Insufficient credits to execute this operation");
-        }
-
+        validateRequestExecutioon(operationRequest, userStats, operationCost);
+        logger.info("Invoking lambda function");
         var result = invokeLambda(operationType, operationRequest.getValue1(), operationRequest.getValue2());
+        logger.info("Saving operation execution");
         Operation operation = saveOperation(operationCost, operationType);
         List<Record> records = recordService.findRecordsByUser(user).orElse(new ArrayList<>());
         records.sort(Comparator.comparingLong(Record::getId).reversed());
@@ -107,8 +116,24 @@ public class OperationService {
             record.setAmount(lastRecord.get().getAmount() - operationCost);
         }
         recordRepository.save(record);
+        logger.info("Clearing existing application cache data");
         cacheManager.getCacheNames().forEach(cacheName -> cacheManager.getCache(cacheName).clear());
         return new OperationResponse(result, record.getAmount());
+    }
+
+    private static void validateRequestExecutioon(OperationRequest operationRequest, UserStatsResponse userStats, Integer operationCost) {
+        logger.info("Validating request execution");
+        if (userStats.getCurrentBalance() < operationCost) {
+            throw new OperationException("Insufficient credits to execute this operation");
+        }
+
+        if (operationRequest.getOperationType().equals("DIVISION") && operationRequest.getValue2() == 0) {
+            throw new OperationException("Is not possible execute division by zero");
+        }
+
+        if (operationRequest.getOperationType().equals("SQUARE_ROOT") && operationRequest.getValue1() < 0) {
+            throw new OperationException("Operation error: Is not possible get the square root of a negative value");
+        }
     }
 
     private Operation saveOperation(Integer operationCost, OperationTypeEnum operationType) {
@@ -141,7 +166,7 @@ public class OperationService {
             InvokeResponse invokeResponse = lambdaClient.invoke(invokeRequest);
             return invokeResponse.payload().asUtf8String();
         } catch (ServiceException | ResourceNotFoundException e) {
-            System.err.println(e.awsErrorDetails().errorMessage());
+            logger.debug("Error executing lambda function: " + e.getMessage());
             return "Error: Could not invoke Lambda function.";
         }
     }
