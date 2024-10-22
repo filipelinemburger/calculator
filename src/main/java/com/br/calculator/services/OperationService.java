@@ -89,7 +89,7 @@ public class OperationService {
         response.setDate(record.getDate());
         response.setOperationCost(record.getOperation().getCost());
         response.setOperationType(record.getOperation().getType().name());
-        response.setUserBalance(record.getUserBalance());
+        response.setUserBalance(record.getAmount());
         return response;
     }
 
