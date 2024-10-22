@@ -11,7 +11,11 @@ import com.br.calculator.enums.OperationTypeEnum;
 import com.br.calculator.exceptions.OperationException;
 import com.br.calculator.repositories.OperationRepository;
 import com.br.calculator.repositories.RecordRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
 import software.amazon.awssdk.core.SdkBytes;
@@ -35,12 +39,14 @@ public class OperationService {
     private static final int INITIAL_AMOUNT = 200;
     @Value("${aws.lambda.function}")
     private String LAMBDA_FUNCTION;
+
+    private final CacheManager cacheManager;
     private final RecordService recordService;
     private final OperationRepository operationRepository;
     private final RecordRepository recordRepository;
     private final LambdaClient lambdaClient;
 
-    public OperationService(RecordService recordService, OperationRepository operationRepository, RecordRepository recordRepository) {
+    public OperationService(RecordService recordService, OperationRepository operationRepository, RecordRepository recordRepository, CacheManager cacheManager) {
         this.lambdaClient = LambdaClient.builder()
                 .region(Region.US_EAST_2)
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
@@ -48,16 +54,19 @@ public class OperationService {
         this.recordService = recordService;
         this.operationRepository = operationRepository;
         this.recordRepository = recordRepository;
+        this.cacheManager = cacheManager;
     }
 
+    @Cacheable("userOperations")
     public List<RecordResponse> getUserRecords(User user) {
         var records = recordRepository.findAllByUser(user).orElse(new ArrayList<>());
         return records.stream().map(this::getRecordResponse).collect(Collectors.toList());
     }
 
+    @Cacheable("userStats")
     public UserStatsResponse getUserStats(User user) {
         var records = recordRepository.findAllByUser(user).orElse(new ArrayList<>());
-        Optional<Record> lastRecord  = records.stream().max(Comparator.comparingLong(Record::getId));
+        Optional<Record> lastRecord = records.stream().max(Comparator.comparingLong(Record::getId));
         UserStatsResponse userStatsResponse = new UserStatsResponse();
         userStatsResponse.setTotalOperations((long) records.size());
         userStatsResponse.setCurrentBalance(lastRecord.map(Record::getAmount).orElse(200));
@@ -98,6 +107,7 @@ public class OperationService {
             record.setAmount(lastRecord.get().getAmount() - operationCost);
         }
         recordRepository.save(record);
+        cacheManager.getCacheNames().forEach(cacheName -> cacheManager.getCache(cacheName).clear());
         return new OperationResponse(result, record.getAmount());
     }
 
