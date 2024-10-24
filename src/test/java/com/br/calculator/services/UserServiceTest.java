@@ -3,7 +3,6 @@ package com.br.calculator.services;
 import com.br.calculator.entities.User;
 import com.br.calculator.exceptions.UserException;
 import com.br.calculator.repositories.UserRepository;
-import com.br.calculator.services.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -44,7 +43,7 @@ class UserServiceTest {
         when(userRepository.findByUsername(user.getUsername())).thenReturn(Optional.empty());
         when(passwordEncoder.encode(user.getPassword())).thenReturn("encodedPassword");
 
-        userService.createNewUser(user);
+        userService.createUser(user);
 
         assertEquals(ACTIVE, user.getStatus());
         verify(userRepository, times(1)).save(user);
@@ -55,7 +54,7 @@ class UserServiceTest {
     void testCreateNewUser_UserAlreadyExists() {
         when(userRepository.findByUsername(user.getUsername())).thenReturn(Optional.of(user));
 
-        UserException exception = assertThrows(UserException.class, () -> userService.createNewUser(user));
+        UserException exception = assertThrows(UserException.class, () -> userService.createUser(user));
         assertEquals("User already exists", exception.getMessage());
     }
 
@@ -63,7 +62,7 @@ class UserServiceTest {
     @Test
     void testCreateNewUser_UsernameEmpty() {
         user.setUsername("");
-        UserException exception = assertThrows(UserException.class, () -> userService.createNewUser(user));
+        UserException exception = assertThrows(UserException.class, () -> userService.createUser(user));
         assertEquals("Username cannot be empty.", exception.getMessage());
     }
 
@@ -71,11 +70,11 @@ class UserServiceTest {
     @Test
     void testCreateNewUser_UsernameInvalidLength() {
         user.setUsername("ab");  // too short
-        UserException exception = assertThrows(UserException.class, () -> userService.createNewUser(user));
+        UserException exception = assertThrows(UserException.class, () -> userService.createUser(user));
         assertEquals("Username must be between 3 and 20 characters long.", exception.getMessage());
 
         user.setUsername("a".repeat(21));  // too long
-        exception = assertThrows(UserException.class, () -> userService.createNewUser(user));
+        exception = assertThrows(UserException.class, () -> userService.createUser(user));
         assertEquals("Username must be between 3 and 20 characters long.", exception.getMessage());
     }
 
@@ -83,7 +82,7 @@ class UserServiceTest {
     @Test
     void testCreateNewUser_InvalidCharacters() {
         user.setUsername("test@user");  // Invalid character
-        UserException exception = assertThrows(UserException.class, () -> userService.createNewUser(user));
+        UserException exception = assertThrows(UserException.class, () -> userService.createUser(user));
         assertEquals("Username can only contain letters, numbers, and underscores.", exception.getMessage());
     }
 
@@ -91,7 +90,7 @@ class UserServiceTest {
     @Test
     void testCreateNewUser_ConsecutiveUnderscores() {
         user.setUsername("test__user");  // Consecutive underscores
-        UserException exception = assertThrows(UserException.class, () -> userService.createNewUser(user));
+        UserException exception = assertThrows(UserException.class, () -> userService.createUser(user));
         assertEquals("Username cannot contain consecutive underscores.", exception.getMessage());
     }
 

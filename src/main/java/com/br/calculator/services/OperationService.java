@@ -74,7 +74,7 @@ public class OperationService {
 
     @Cacheable("userStats")
     public UserStatsResponse getUserStats(User user) {
-        logger.info("Fetching user stats");
+        logger.info("Fetching user stats for user: " + user.getUsername());
         var records = recordRepository.findAllByUser(user).orElse(new ArrayList<>());
         Optional<Record> lastRecord = records.stream().max(Comparator.comparingLong(Record::getId));
         UserStatsResponse userStatsResponse = new UserStatsResponse();

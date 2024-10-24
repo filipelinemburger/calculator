@@ -3,6 +3,7 @@ package com.br.calculator.services;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import com.br.calculator.dto.OperationRequest;
 import com.br.calculator.dto.OperationResponse;
@@ -18,6 +19,8 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.test.context.TestPropertySource;
 import software.amazon.awssdk.services.lambda.LambdaClient;
 import software.amazon.awssdk.services.lambda.model.InvokeRequest;
@@ -39,11 +42,18 @@ public class OperationServiceTest {
 
     private User user;
 
+    @Mock
+    private CacheManager cacheManager;
+
+    @Mock
+    private Cache cache;
+
     @BeforeEach
     public void setUp() {
         MockitoAnnotations.openMocks(this);
         user = new User();
         operationService.setLambdaFunction(System.getenv("AWS_LAMBDA_FUNCTION"));
+        when(cacheManager.getCache(anyString())).thenReturn(cache);
     }
 
     @Test

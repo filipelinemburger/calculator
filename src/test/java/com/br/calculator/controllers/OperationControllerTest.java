@@ -1,17 +1,19 @@
 package com.br.calculator.controllers;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import com.br.calculator.dto.OperationRequest;
+import com.br.calculator.dto.OperationResponse;
 import com.br.calculator.dto.RecordResponse;
+import com.br.calculator.dto.UserStatsResponse;
 import com.br.calculator.entities.User;
-import com.br.calculator.repositories.UserRepository;
+import com.br.calculator.exceptions.OperationException;
+import com.br.calculator.exceptions.UserException;
 import com.br.calculator.services.OperationService;
+import com.br.calculator.services.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InjectMocks;
@@ -24,81 +26,131 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 
-import java.util.ArrayList;
-import java.util.Optional;
+import java.util.Collections;
 
 class OperationControllerTest {
-
-    @InjectMocks
-    private OperationController operationController;
 
     @Mock
     private OperationService operationService;
 
     @Mock
-    private UserRepository userRepository;
+    private UserService userService;
 
     @Mock
     private Authentication authentication;
 
-    private User mockUser;
-    private String mockUsername;
+    @Mock
+    private UserDetails userDetails;
+
+    @InjectMocks
+    private OperationController operationController;
+
+    private User user;
 
     @BeforeEach
     void setUp() {
         MockitoAnnotations.openMocks(this);
-        mockUsername = "testUser";
-        mockUser = new User();
-        mockUser.setUsername(mockUsername);
+        user = new User();
+        user.setUsername("testUser");
+    }
+
+    private void mockAuthentication() {
+        when(authentication.isAuthenticated()).thenReturn(true);
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(userDetails.getUsername()).thenReturn("testUser");
+        when(userService.findUserByUserName("testUser")).thenReturn(user);
+
+        SecurityContext securityContext = mock(SecurityContext.class);
+        when(securityContext.getAuthentication()).thenReturn(authentication);
+        SecurityContextHolder.setContext(securityContext);
     }
 
     @Test
-    void testGetOperations_Success() {
-        // Mock authentication and userRepository behavior
-        when(authentication.getName()).thenReturn(mockUsername);
-        when(userRepository.findByUsername(mockUsername)).thenReturn(Optional.of(mockUser));
+    void testGetOperationsSuccess() {
+        mockAuthentication();
 
-        // Create a mock pageable and a mock page
         Pageable pageable = PageRequest.of(0, 10);
-        Page<RecordResponse> mockPage = new PageImpl<>(new ArrayList<>());
+        Page<RecordResponse> mockRecords = new PageImpl<>(Collections.emptyList());
+        when(operationService.getUserRecords(user, pageable)).thenReturn(mockRecords);
 
-        // Mock operationService behavior
-        when(operationService.getUserRecords(mockUser, pageable)).thenReturn(mockPage);
+        ResponseEntity<Page<RecordResponse>> response = operationController.getOperations(0, 10);
 
-        // Call the controller method
-        ResponseEntity<Page<RecordResponse>> response = operationController.getOperations(authentication, 0, 10);
-
-        // Assertions
         assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertNotNull(response.getBody());
-        assertEquals(0, response.getBody().getContent().size());
-
-        // Verify that the mock methods were called
-        verify(userRepository, times(1)).findByUsername(mockUsername);
-        verify(operationService, times(1)).getUserRecords(mockUser, pageable);
+        assertEquals(mockRecords, response.getBody());
+        verify(operationService, times(1)).getUserRecords(user, pageable);
     }
 
     @Test
-    void testGetOperations_UserNotFound() {
-        // Mock userRepository to return empty
-        when(authentication.getName()).thenReturn(mockUsername);
-        when(userRepository.findByUsername(mockUsername)).thenReturn(Optional.empty());
+    void testGetUserStatsSuccess() {
+        mockAuthentication();
 
-        // Create a pageable object
-        Pageable pageable = PageRequest.of(0, 10);
+        UserStatsResponse mockStats = new UserStatsResponse();
+        when(operationService.getUserStats(user)).thenReturn(mockStats);
 
-        // Call the controller method
-        ResponseEntity<Page<RecordResponse>> response = operationController.getOperations(authentication, 0, 10);
+        ResponseEntity<?> response = operationController.getUserStats();
 
-        // Assertions
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertNull(response.getBody()); // Assert the body is null when user is not found
-
-        // Verify that the mock methods were called
-        verify(userRepository, times(1)).findByUsername(mockUsername);
-        verify(operationService, times(0)).getUserRecords(any(User.class), eq(pageable)); // Service should not be called
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(mockStats, response.getBody());
+        verify(operationService, times(1)).getUserStats(user);
     }
 
+    @Test
+    void testGetUserStatsThrowsUserException() {
+        mockAuthentication();
 
+        when(operationService.getUserStats(user)).thenThrow(new UserException("User not found"));
+
+        ResponseEntity<?> response = operationController.getUserStats();
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("User not found", response.getBody());
+        verify(operationService, times(1)).getUserStats(user);
+    }
+
+    @Test
+    void testCalculateSuccess() {
+        mockAuthentication();
+
+        OperationRequest operationRequest = new OperationRequest();
+        OperationResponse mockResponse = new OperationResponse();
+        when(operationService.executeOperation(operationRequest, user)).thenReturn(mockResponse);
+
+        ResponseEntity<?> response = operationController.calculate(operationRequest);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(mockResponse, response.getBody());
+        verify(operationService, times(1)).executeOperation(operationRequest, user);
+    }
+
+    @Test
+    void testCalculateThrowsOperationException() {
+        mockAuthentication();
+
+        OperationRequest operationRequest = new OperationRequest();
+        when(operationService.executeOperation(operationRequest, user)).thenThrow(new OperationException("Invalid operation"));
+
+        ResponseEntity<?> response = operationController.calculate(operationRequest);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("Invalid operation", response.getBody());
+        verify(operationService, times(1)).executeOperation(operationRequest, user);
+    }
+
+    @Test
+    void testCalculateThrowsUserException() {
+        mockAuthentication();
+
+        OperationRequest operationRequest = new OperationRequest();
+        when(operationService.executeOperation(operationRequest, user)).thenThrow(new UserException("User not found"));
+
+        ResponseEntity<?> response = operationController.calculate(operationRequest);
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("User not found", response.getBody());
+        verify(operationService, times(1)).executeOperation(operationRequest, user);
+    }
 }

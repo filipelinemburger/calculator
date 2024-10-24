@@ -4,13 +4,16 @@ import static com.br.calculator.enums.UserStatusEnum.ACTIVE;
 import com.br.calculator.entities.User;
 import com.br.calculator.exceptions.UserException;
 import com.br.calculator.repositories.UserRepository;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
 
 @Service
-public class UserService {
+public class UserService implements UserDetailsService {
 
     private static final String INVALID_CREDENTIALS = "Invalid credentials";
     private final UserRepository userRepository;
@@ -21,7 +24,23 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
     }
 
-    public void createNewUser(User user) {
+    @Override
+    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        return org.springframework.security.core.userdetails.User
+                .withUsername(user.getUsername())
+                .password(user.getPassword())
+                .authorities("USER") // Add roles or authorities here
+                .build();
+    }
+
+    public User findUserByUserName(String userName) {
+        return userRepository.findByUsername(userName).orElseThrow();
+    }
+
+    public void createUser(User user) {
         Optional<User> existingUser = userRepository.findByUsername(user.getUsername());
         if (existingUser.isPresent()) {
             throw new UserException("User already exists");
