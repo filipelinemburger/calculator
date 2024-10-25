@@ -31,7 +31,6 @@ This Calculator Application provides a web interface to perform various mathemat
 
 ### Prerequisites
 - **Java 17**
-- **Node.js** and **npm**
 - **MySQL** database
 - **Gradle**
 
