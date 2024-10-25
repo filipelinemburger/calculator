@@ -95,8 +95,8 @@ public class OperationService {
 
     public OperationResponse executeOperation(OperationRequest operationRequest, User user) {
         var operationType = OperationTypeEnum.fromString(operationRequest.getOperationType());
-        var operationCost = getOperationCost(operationType);
-        var userStats = getUserStats(user);
+        Integer operationCost = getOperationCost(operationType);
+        UserStatsResponse userStats = getUserStats(user);
         validateRequestExecutioon(operationRequest, userStats, operationCost);
         logger.info("Invoking lambda function");
         var result = invokeLambda(operationType, operationRequest.getValue1(), operationRequest.getValue2());
