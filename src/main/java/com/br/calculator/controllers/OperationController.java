@@ -4,10 +4,12 @@ import com.br.calculator.dto.OperationRequest;
 import com.br.calculator.dto.OperationResponse;
 import com.br.calculator.dto.RecordResponse;
 import com.br.calculator.dto.UserStatsResponse;
+import com.br.calculator.entities.Record;
 import com.br.calculator.entities.User;
 import com.br.calculator.exceptions.OperationException;
 import com.br.calculator.exceptions.UserException;
 import com.br.calculator.services.OperationService;
+import com.br.calculator.services.RecordService;
 import com.br.calculator.services.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +22,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -27,6 +30,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Optional;
 
 @RestController
 @RequestMapping("/operation")
@@ -36,6 +41,9 @@ public class OperationController {
 
     @Autowired
     private OperationService operationService;
+
+    @Autowired
+    private RecordService recordService;
 
     @Autowired
     private UserService userService;
@@ -82,6 +90,28 @@ public class OperationController {
             return ResponseEntity.ok(operationResponse);
         } catch (OperationException ex) {
             logger.error("Error during operation execution", ex);
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        } catch (UserException ex) {
+            logger.error("User validation error", ex);
+            return ResponseEntity.badRequest().body(ex.getMessage());
+        }
+    }
+
+    @DeleteMapping
+    @ResponseStatus(HttpStatus.OK)
+    public ResponseEntity<?> deleteRecord(@RequestParam Long recordId) {
+        try {
+            User user = getAuthenticatedUser();
+            logger.info("Delete record for user: {}", user.getUsername());
+            Optional<Record> record = recordService.findById(recordId, user);
+            if (record.isPresent()) {
+                recordService.deleteRecord(record.get());
+                logger.info("RecordId {} has been deleted", recordId);
+                return ResponseEntity.ok("Record deleted successfully");
+            }
+            return ResponseEntity.notFound().build();
+        } catch (OperationException ex) {
+            logger.error("Error during delete record execution", ex);
             return ResponseEntity.badRequest().body(ex.getMessage());
         } catch (UserException ex) {
             logger.error("User validation error", ex);

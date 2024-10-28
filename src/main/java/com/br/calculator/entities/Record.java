@@ -29,5 +29,6 @@ public class Record {
     private Integer userBalance;
     private String operationResponse;
     private LocalDateTime date = LocalDateTime.now();
+    private Boolean active;
 
 }

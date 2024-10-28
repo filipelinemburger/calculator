@@ -12,6 +12,9 @@ import java.util.Optional;
 
 @Repository
 public interface RecordRepository extends JpaRepository<Record, Long> {
-    Optional<List<Record>> findAllByUser(User user);
-    Page<Record> findAllByUser(User user, Pageable pageable);
+
+    Optional<Record> findByIdAndActive(Long id, Boolean active);
+
+    Optional<List<Record>> findAllByUserAndActive(User user, Boolean active);
+    Page<Record> findAllByUserAndActive(User user, Boolean active, Pageable pageable);
 }

@@ -1,6 +1,5 @@
 package com.br.calculator.services;
 
-import com.br.calculator.controllers.OperationController;
 import com.br.calculator.dto.OperationRequest;
 import com.br.calculator.dto.OperationResponse;
 import com.br.calculator.dto.RecordResponse;
@@ -14,9 +13,7 @@ import com.br.calculator.repositories.OperationRepository;
 import com.br.calculator.repositories.RecordRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -35,8 +32,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 @Service
 public class OperationService {
@@ -66,25 +61,32 @@ public class OperationService {
 
     @Cacheable("userOperations")
     public Page<RecordResponse> getUserRecords(User user, Pageable pageable) {
-        var recordsPage = recordRepository.findAllByUser(user, pageable);
+        var recordsPage = recordRepository.findAllByUserAndActive(user, true, pageable);
         logger.info("Data fetched. Mapping response data");
         return recordsPage.map(this::getRecordResponse);
     }
 
+    public int getNewAmount(List<Record> records) {
+        int totalCost = 0;
+        if (!records.isEmpty()) {
+            totalCost = records.stream().map(Record::getOperation).mapToInt(Operation::getCost).sum();
+        }
+        return 200 - totalCost;
+    }
 
     @Cacheable("userStats")
     public UserStatsResponse getUserStats(User user) {
         logger.info("Fetching user stats for user: " + user.getUsername());
-        var records = recordRepository.findAllByUser(user).orElse(new ArrayList<>());
-        Optional<Record> lastRecord = records.stream().max(Comparator.comparingLong(Record::getId));
+        List<Record> records = recordRepository.findAllByUserAndActive(user, true).orElse(new ArrayList<>());
         UserStatsResponse userStatsResponse = new UserStatsResponse();
         userStatsResponse.setTotalOperations((long) records.size());
-        userStatsResponse.setCurrentBalance(lastRecord.map(Record::getAmount).orElse(200));
+        userStatsResponse.setCurrentBalance(getNewAmount(records));
         return userStatsResponse;
     }
 
     private RecordResponse getRecordResponse(Record record) {
         var response = new RecordResponse();
+        response.setId(record.getId());
         response.setOperationId(record.getId());
         response.setDate(record.getDate());
         response.setOperationCost(record.getOperation().getCost());
@@ -102,23 +104,24 @@ public class OperationService {
         var result = invokeLambda(operationType, operationRequest.getValue1(), operationRequest.getValue2());
         logger.info("Saving operation execution");
         Operation operation = saveOperation(operationCost, operationType);
-        List<Record> records = recordService.findRecordsByUser(user).orElse(new ArrayList<>());
+        List<Record> records = recordRepository.findAllByUserAndActive(user, true).orElse(new ArrayList<>());
         records.sort(Comparator.comparingLong(Record::getId).reversed());
-        Record record = new Record();
-        record.setOperation(operation);
-        record.setOperationResponse(result);
-        record.setUser(user);
-
-        if (records.isEmpty()) {
-            record.setAmount(INITIAL_AMOUNT - operationCost);
-        } else {
-            var lastRecord = records.stream().findFirst();
-            record.setAmount(lastRecord.get().getAmount() - operationCost);
-        }
+        int newAmount = getNewAmount(records) - operationCost;
+        Record record = getRecord(user, operation, result, newAmount);
         recordRepository.save(record);
         logger.info("Clearing existing application cache data");
         cacheManager.getCacheNames().forEach(cacheName -> cacheManager.getCache(cacheName).clear());
-        return new OperationResponse(result, record.getAmount());
+        return new OperationResponse(result, newAmount);
+    }
+
+    private static Record getRecord(User user, Operation operation, String result, int newAmount) {
+        Record record = new Record();
+        record.setOperation(operation);
+        record.setOperationResponse(result);
+        record.setActive(Boolean.TRUE);
+        record.setUser(user);
+        record.setAmount(newAmount);
+        return record;
     }
 
     private static void validateRequestExecutioon(OperationRequest operationRequest, UserStatsResponse userStats, Integer operationCost) {
