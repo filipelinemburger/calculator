@@ -4,7 +4,6 @@ import com.br.calculator.entities.Record;
 import com.br.calculator.entities.User;
 import com.br.calculator.exceptions.UserException;
 import com.br.calculator.repositories.RecordRepository;
-import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 
 import java.util.Objects;
@@ -14,11 +13,9 @@ import java.util.Optional;
 public class RecordService {
 
     private final RecordRepository recordRepository;
-    private final CacheManager cacheManager;
 
-    public RecordService(RecordRepository recordRepository, CacheManager cacheManager) {
+    public RecordService(RecordRepository recordRepository) {
         this.recordRepository = recordRepository;
-        this.cacheManager = cacheManager;
     }
 
     public Optional<Record> findById(Long id, User user) {
@@ -32,7 +29,6 @@ public class RecordService {
     public void deleteRecord(Record record) {
         record.setActive(false);
         recordRepository.save(record);
-        cacheManager.getCacheNames().forEach(cacheName -> cacheManager.getCache(cacheName).clear());
     }
 
 }

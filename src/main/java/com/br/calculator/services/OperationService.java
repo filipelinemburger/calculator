@@ -38,25 +38,20 @@ public class OperationService {
 
     private static final Logger logger = LoggerFactory.getLogger(OperationService.class);
 
-    private static final int INITIAL_AMOUNT = 200;
     @Value("${aws.lambda.function}")
     private String LAMBDA_FUNCTION;
 
-    private final CacheManager cacheManager;
-    private final RecordService recordService;
     private final OperationRepository operationRepository;
     private final RecordRepository recordRepository;
     private final LambdaClient lambdaClient;
 
-    public OperationService(RecordService recordService, OperationRepository operationRepository, RecordRepository recordRepository, CacheManager cacheManager) {
+    public OperationService(OperationRepository operationRepository, RecordRepository recordRepository) {
         this.lambdaClient = LambdaClient.builder()
                 .region(Region.US_EAST_2)
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
                 .build();
-        this.recordService = recordService;
         this.operationRepository = operationRepository;
         this.recordRepository = recordRepository;
-        this.cacheManager = cacheManager;
     }
 
     @Cacheable("userOperations")
@@ -74,7 +69,6 @@ public class OperationService {
         return 200 - totalCost;
     }
 
-    @Cacheable("userStats")
     public UserStatsResponse getUserStats(User user) {
         logger.info("Fetching user stats for user: " + user.getUsername());
         List<Record> records = recordRepository.findAllByUserAndActive(user, true).orElse(new ArrayList<>());
@@ -110,7 +104,6 @@ public class OperationService {
         Record record = getRecord(user, operation, result, newAmount);
         recordRepository.save(record);
         logger.info("Clearing existing application cache data");
-        cacheManager.getCacheNames().forEach(cacheName -> cacheManager.getCache(cacheName).clear());
         return new OperationResponse(result, newAmount);
     }
 
