@@ -38,22 +38,20 @@ public class OperationService {
 
     private static final Logger logger = LoggerFactory.getLogger(OperationService.class);
 
-    private static final int INITIAL_AMOUNT = 200;
+
     @Value("${aws.lambda.function}")
     private String LAMBDA_FUNCTION;
 
     private final CacheManager cacheManager;
-    private final RecordService recordService;
     private final OperationRepository operationRepository;
     private final RecordRepository recordRepository;
     private final LambdaClient lambdaClient;
 
-    public OperationService(RecordService recordService, OperationRepository operationRepository, RecordRepository recordRepository, CacheManager cacheManager) {
+    public OperationService(OperationRepository operationRepository, RecordRepository recordRepository, CacheManager cacheManager) {
         this.lambdaClient = LambdaClient.builder()
                 .region(Region.US_EAST_2)
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
                 .build();
-        this.recordService = recordService;
         this.operationRepository = operationRepository;
         this.recordRepository = recordRepository;
         this.cacheManager = cacheManager;
