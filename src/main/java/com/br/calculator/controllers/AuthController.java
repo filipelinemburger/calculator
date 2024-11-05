@@ -38,6 +38,7 @@ public class AuthController {
     private final UserService userService;
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
+    private final CacheManager cacheManager;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody User user) {
@@ -56,12 +57,16 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<?> createAuthenticationToken(@RequestBody AuthenticationRequest authenticationRequest) {
+        cacheManager.getCacheNames().forEach(cacheName ->
+                cacheManager.getCache(cacheName).clear()
+        );
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(authenticationRequest.getUsername(), authenticationRequest.getPassword())
         );
 
         final UserDetails userDetails = userService.loadUserByUsername(authenticationRequest.getUsername());
         final String jwt = jwtUtil.generateToken(userDetails);
+        cacheManager.getCacheNames().forEach(cacheName -> Objects.requireNonNull(cacheManager.getCache(cacheName)).clear());
         return ResponseEntity.ok(new AuthenticationResponse(jwt));
     }
 
@@ -69,6 +74,9 @@ public class AuthController {
     public ResponseEntity<?> logout() {
         var user = (org.springframework.security.core.userdetails.User) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         logger.info("Users logout action. Username: " + user.getUsername());
+        cacheManager.getCacheNames().forEach(cacheName ->
+                cacheManager.getCache(cacheName).clear()
+        );
         SecurityContextHolder.clearContext();
         return ResponseEntity.ok(null);
     }
